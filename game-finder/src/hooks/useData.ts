@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import apiClient from "../services/api-clients";
 import { CanceledError } from "axios";
 import type { AxiosRequestConfig } from "axios";
@@ -8,14 +8,20 @@ interface FetchResponse<T> {
   results: T[];
 }
 
-const useData = <T>(
-  endpoint: string,
-  requestConfig?: AxiosRequestConfig,
-  deps: readonly unknown[] = [],
-) => {
+const useData = <T>(endpoint: string, requestConfig?: AxiosRequestConfig) => {
   const [data, setData] = useState<T[]>([]);
   const [error, setError] = useState("");
   const [isLoading, setLoading] = useState(true);
+
+  // Make requestConfig stable even if caller creates new objects every render.
+  const paramsKey = JSON.stringify(requestConfig?.params ?? null);
+  const requestConfigRef = useRef<AxiosRequestConfig | undefined>(
+    requestConfig,
+  );
+
+  useEffect(() => {
+    requestConfigRef.current = requestConfig;
+  }, [paramsKey, requestConfig]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -25,7 +31,7 @@ const useData = <T>(
     apiClient
       .get<FetchResponse<T>>(endpoint, {
         signal: controller.signal,
-        ...requestConfig,
+        ...requestConfigRef.current,
       })
       .then((res) => {
         setData(res.data.results);
@@ -38,7 +44,7 @@ const useData = <T>(
       });
 
     return () => controller.abort();
-  }, [endpoint, requestConfig, ...deps]);
+  }, [endpoint, paramsKey]);
 
   return { data, error, isLoading };
 };
